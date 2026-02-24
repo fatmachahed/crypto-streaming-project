@@ -14,7 +14,7 @@ st.caption("Kafka + Spark Structured Streaming + Isolation Forest")
 if not os.path.exists(CLEAN_PATH):
     st.warning("⏳ En attente de données... Lance le producer et Spark.")
     time.sleep(3)
-    st.rerun()
+    st.experimental_rerun() 
 
 df     = pd.read_csv(CLEAN_PATH)
 df["timestamp"] = pd.to_datetime(df["timestamp"])
@@ -83,4 +83,4 @@ else:
 
 # ── Auto refresh ──────────────────────────
 time.sleep(3)
-st.rerun()
+st.experimental_rerun() 

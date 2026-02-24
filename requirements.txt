@@ -1,0 +1,9 @@
+pyspark==3.3.2
+confluent-kafka
+requests
+pandas
+numpy
+scikit-learn
+joblib
+streamlit
+plotly

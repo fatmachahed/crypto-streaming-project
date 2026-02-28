@@ -1,2 +1,13 @@
-checkpoints
-env
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+env/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Spark
+checkpoints/

@@ -1,4 +1,3 @@
-
 # 📈 Crypto Real-Time Streaming Pipeline
 
 > Pipeline de streaming temps réel de prix de cryptomonnaies avec détection d'anomalies ML et dashboard interactif.

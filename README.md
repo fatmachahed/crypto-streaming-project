@@ -1,11 +1,15 @@
-cat > /home/claude/README.md << 'ENDOFFILE'
 
 # 📈 Crypto Real-Time Streaming Pipeline
 
 > Pipeline de streaming temps réel de prix de cryptomonnaies avec détection d'anomalies ML et dashboard interactif.
 
----
+## 🌐 Source de Données
 
+Les prix sont récupérés via l'endpoint **CoinGecko `/simple/price`** (gratuit, sans clé API).  
+Chaque appel retourne le prix USD, la variation 24h et le volume 24h pour les 5 coins suivants : `bitcoin`, `ethereum`, `binancecoin`, `solana`, `cardano`.  
+La fréquence de collecte est de **15 secondes** pour respecter le rate limit de l'API gratuite (~30 appels/minute).
+
+---
 ## 🏗️ Architecture
 
 ```

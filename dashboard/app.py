@@ -272,7 +272,7 @@ st.subheader("🚨 Alertes Anomalies")
 if not df_anomaly.empty: 
     real_anomalies = df_anomaly[df_anomaly["status"] == "ANOMALIE"]
     if not real_anomalies.empty:
-        st.error(f"{len(real_anomalies)} anomalies détectées !")
+        st.error(f"⚠️ {len(real_anomalies)} anomalies détectées !")
         st.dataframe(real_anomalies.tail(20), use_container_width=True)
     else:
         st.success("Aucune anomalie détectée pour l'instant")

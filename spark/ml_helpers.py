@@ -43,7 +43,6 @@ def detect_anomaly_zscore(prices, current_price):
     mean = np.mean(prices_arr)
     std  = np.std(prices_arr)
 
-    # Si std trop petite (prix completement stable), pas d'anomalie
     if std < 1e-6:
         return "normal", 0.0
 

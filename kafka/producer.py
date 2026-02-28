@@ -3,7 +3,7 @@ from confluent_kafka import Producer
 from datetime import datetime
 
 COINS = ["bitcoin", "ethereum", "binancecoin", "solana", "cardano"]
-producer = Producer({"bootstrap.servers": "localhost:39092"})  # ✅ port 39092
+producer = Producer({"bootstrap.servers": "localhost:39092"}) 
 
 print("🚀 Producer started...")
 while True:
@@ -20,7 +20,6 @@ while True:
         )
         data = r.json()
 
-        # ✅ Vérifier que la réponse est un dict valide
         if not isinstance(data, dict):
             print(f"⚠️ Rate limit ou erreur API, attente 30s...")
             time.sleep(30)
@@ -41,4 +40,4 @@ while True:
     except Exception as e:
         print(f"Error: {e}")
 
-    time.sleep(15)  # ✅ 15s au lieu de 2s pour éviter le rate limit
+    time.sleep(15)  

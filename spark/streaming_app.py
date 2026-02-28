@@ -36,15 +36,15 @@ schema = StructType() \
 # ── Spark session ─────────────────────────────────────────────────────────────
 spark = SparkSession.builder \
     .appName("CryptoStreaming") \
+    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2") \
     .config("spark.sql.shuffle.partitions", "2") \
     .config("spark.driver.host", "localhost") \
     .getOrCreate()
-spark.sparkContext.setLogLevel("WARN")
 
 # ── Read from Kafka ───────────────────────────────────────────────────────────
 raw = spark.readStream \
     .format("kafka") \
-    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("kafka.bootstrap.servers", "localhost:39092") \
     .option("subscribe", "crypto_prices") \
     .option("startingOffsets", "latest") \
     .load()
@@ -105,7 +105,7 @@ def process_batch(batch_df, batch_id):
         .filter(col("price_usd") > 0) \
         .filter(col("volume_24h") > 0) \
         .filter(col("change_24h").between(-100, 100)) \
-        .withColumn("timestamp", col("timestamp").cast(TimestampType())) \
+        .withColumn("timestamp", col("timestamp")) \
         .dropDuplicates(["coin", "timestamp"])
 
     total_raw   = batch_df.count()
@@ -267,7 +267,18 @@ def process_batch(batch_df, batch_id):
     agg_path     = os.path.join(OUTPUT_DIR, "crypto_agg.csv")
     pred_path    = os.path.join(OUTPUT_DIR, "crypto_predictions.csv")
     anomaly_path = os.path.join(OUTPUT_DIR, "crypto_anomalies.csv")
-
+    clean_path = os.path.join(OUTPUT_DIR, "crypto_clean.csv")
+    
+    # df_clean.toPandas().to_csv(clean_path,mode="a",header=not os.path.exists(clean_path),index=False)
+    pdf_clean = df_clean.toPandas()
+    pdf_clean["timestamp"] = pdf_clean["timestamp"].astype(str)  
+    pdf_clean["anomaly_score"] = pdf_clean["coin"].map(
+        lambda c: anomaly_results.get(c, {}).get("z_score", 0.0) or 0.0
+    )
+    pdf_clean["is_anomaly"] = pdf_clean["coin"].map(
+        lambda c: 1 if anomaly_results.get(c, {}).get("status") == "ANOMALIE" else 0
+    )
+    pdf_clean.to_csv(clean_path, mode="a", header=not os.path.exists(clean_path), index=False)
     agg.toPandas().to_csv(agg_path, mode="a", header=not os.path.exists(agg_path), index=False)
 
     pred_df = pd.DataFrame([

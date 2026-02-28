@@ -1,103 +1,298 @@
-import os, pandas as pd, numpy as np
+import sys, os, builtins, pandas as pd, numpy as np
+sys.stdout.reconfigure(encoding='utf-8')
+
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_json
-from pyspark.sql.types import StructType, DoubleType, StringType
+from pyspark.sql.functions import col, from_json, window, avg, count
+from pyspark.sql.functions import max as spark_max, min as spark_min
+from pyspark.sql.functions import round as spark_round
+from pyspark.sql.types import StructType, DoubleType, StringType, TimestampType
+from sklearn.linear_model import LinearRegression
+from collections import defaultdict
 
 if os.name == 'nt':
     os.environ["HADOOP_HOME"] = r"C:\hadoop"
     os.environ["PATH"] = r"C:\hadoop\bin;" + os.environ["PATH"]
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "..", "model", "anomaly_model.pkl")
-OUTPUT_DIR = os.path.join(BASE_DIR, "..", "output")
 CKPT_DIR   = os.path.join(BASE_DIR, "..", "checkpoints")
+OUTPUT_DIR = os.path.join(BASE_DIR, "..", "output")
+os.makedirs(CKPT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(os.path.join(BASE_DIR, "..", "model"), exist_ok=True)
 
-# ── Train model once ──────────────────────
-def train_model():
-    from sklearn.ensemble import IsolationForest
-    import joblib
-    np.random.seed(42)
-    data = pd.DataFrame({
-        "price_usd":  np.random.lognormal(10, 0.5, 5000),
-        "change_24h": np.random.normal(0, 3, 5000),
-        "volume_24h": np.random.lognormal(20, 1, 5000)
-    })
-    model = IsolationForest(contamination=0.05, random_state=42)
-    model.fit(data)
-    import joblib
-    joblib.dump(model, MODEL_PATH)
-    print("✅ Model trained and saved")
+# ── Buffers en memoire ────────────────────────────────────────────────────────
+price_history    = defaultdict(list)
+MIN_POINTS       = 15
+ZSCORE_THRESHOLD = 3.0
+PRICE_DECIMALS   = 4    # arrondi des prix dans le buffer pour eviter faux positifs
 
-if not os.path.exists(MODEL_PATH):
-    train_model()
-
-# ── Schema ────────────────────────────────
+# ── Schema ────────────────────────────────────────────────────────────────────
 schema = StructType() \
-    .add("coin", StringType()) \
-    .add("timestamp", StringType()) \
-    .add("price_usd", DoubleType()) \
+    .add("coin",       StringType()) \
+    .add("timestamp",  StringType()) \
+    .add("price_usd",  DoubleType()) \
     .add("change_24h", DoubleType()) \
     .add("volume_24h", DoubleType())
 
-# ── Spark session ─────────────────────────
+# ── Spark session ─────────────────────────────────────────────────────────────
 spark = SparkSession.builder \
     .appName("CryptoStreaming") \
-    .config("spark.jars.packages",
-            "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2") \
     .config("spark.sql.shuffle.partitions", "2") \
+    .config("spark.driver.host", "localhost") \
     .getOrCreate()
 spark.sparkContext.setLogLevel("WARN")
 
-# ── Read from Kafka ───────────────────────
-df_parsed = spark.readStream \
+# ── Read from Kafka ───────────────────────────────────────────────────────────
+raw = spark.readStream \
     .format("kafka") \
     .option("kafka.bootstrap.servers", "localhost:9092") \
     .option("subscribe", "crypto_prices") \
     .option("startingOffsets", "latest") \
-    .load() \
-    .select(from_json(col("value").cast("string"), schema).alias("d")) \
-    .select("d.*")
+    .load()
 
-# ── Process each batch ────────────────────
+df = raw.select(from_json(col("value").cast("string"), schema).alias("d")).select("d.*")
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def fmt_volume(v):
+    if v >= 1_000_000_000:
+        return f"${v/1_000_000_000:.2f}B"
+    elif v >= 1_000_000:
+        return f"${v/1_000_000:.2f}M"
+    return f"${v:,.0f}"
+
+def predict_next_price(prices):
+    """Regression lineaire sur l'historique des prix."""
+    if len(prices) < MIN_POINTS:
+        return None, None
+    X = np.arange(len(prices)).reshape(-1, 1)
+    y = np.array(prices)
+    model = LinearRegression()
+    model.fit(X, y)
+    predicted = model.predict(np.array([[len(prices)]]))[0]
+    trend = "HAUSSE" if model.coef_[0] > 0 else "BAISSE"
+    return builtins.round(predicted, 4), trend
+
+def detect_anomaly_zscore(prices, current_price):
+    """
+    Z-Score sur l'historique des prix arrondis a PRICE_DECIMALS.
+    ANOMALIE si |z| > ZSCORE_THRESHOLD (3.0).
+    Retourne (status, z_score) ou (None, None) si pas assez de points.
+    """
+    if len(prices) < MIN_POINTS:
+        return None, None
+
+    prices_arr = np.array(prices)
+    mean = np.mean(prices_arr)
+    std  = np.std(prices_arr)
+
+    # Si std trop petite (prix completement stable), pas d'anomalie
+    if std < 1e-6:
+        return "normal", 0.0
+
+    z = (current_price - mean) / std
+    status = "ANOMALIE" if builtins.abs(z) > ZSCORE_THRESHOLD else "normal"
+    return status, builtins.round(float(z), 4)
+
+# ── foreachBatch ──────────────────────────────────────────────────────────────
 def process_batch(batch_df, batch_id):
-    import joblib
     if batch_df.isEmpty():
         return
 
-    model = joblib.load(MODEL_PATH)
-    pdf   = batch_df.toPandas()
+    # ════════════════════════════════════════════
+    # 1. DATA CLEANING
+    # ════════════════════════════════════════════
+    df_clean = batch_df \
+        .dropna() \
+        .filter(col("price_usd") > 0) \
+        .filter(col("volume_24h") > 0) \
+        .filter(col("change_24h").between(-100, 100)) \
+        .withColumn("timestamp", col("timestamp").cast(TimestampType())) \
+        .dropDuplicates(["coin", "timestamp"])
 
-    # 1. Cleaning
-    pdf = pdf.dropna()
-    pdf = pdf[pdf["price_usd"] > 0]
-    pdf["timestamp"] = pd.to_datetime(pdf["timestamp"])
+    total_raw   = batch_df.count()
+    total_clean = df_clean.count()
 
-    # 2. ML - Anomaly Detection
-    features = ["price_usd", "change_24h", "volume_24h"]
-    pdf["anomaly_score"] = model.decision_function(pdf[features])
-    pdf["is_anomaly"]    = (model.predict(pdf[features]) == -1).astype(int)
+    if total_clean == 0:
+        print(f"Batch {batch_id} -- vide apres nettoyage")
+        return
 
-    # 3. Aggregation per coin
-    agg = pdf.groupby("coin").agg(
-        latest_price  = ("price_usd",  "last"),
-        avg_change    = ("change_24h", "mean"),
-        anomaly_count = ("is_anomaly", "sum"),
-        event_count   = ("coin",       "count")
-    ).reset_index()
+    # ════════════════════════════════════════════
+    # 2. AGREGATIONS PAR COIN
+    # ════════════════════════════════════════════
+    agg = df_clean.groupBy("coin").agg(
+        spark_round(avg("price_usd"),  2).alias("avg_price"),
+        spark_round(spark_max("price_usd"), 2).alias("max_price"),
+        spark_round(spark_min("price_usd"), 2).alias("min_price"),
+        spark_round(spark_max("price_usd") - spark_min("price_usd"), 2).alias("price_range"),
+        spark_round(avg("change_24h"), 4).alias("avg_change_24h"),
+        spark_round(avg("volume_24h"), 0).alias("avg_volume_24h"),
+        count("*").alias("nb_events")
+    ).orderBy("coin")
 
-    # 4. Save
-    clean = os.path.join(OUTPUT_DIR, "crypto_clean.csv")
-    agg_f = os.path.join(OUTPUT_DIR, "crypto_agg.csv")
-    pdf.to_csv(clean, mode="a", header=not os.path.exists(clean), index=False)
-    agg.to_csv(agg_f, mode="a", header=not os.path.exists(agg_f), index=False)
+    rows_agg = agg.collect()
 
-    print(f"\n=== Batch {batch_id} — {len(pdf)} events ===")
-    print(pdf[["coin","price_usd","change_24h","is_anomaly"]].to_string())
+    if not rows_agg:
+        print(f"Batch {batch_id} -- aggregation vide, skip")
+        return
 
-# ── Start streaming ───────────────────────
-df_parsed.writeStream \
+    # ════════════════════════════════════════════
+    # 3. WINDOWING -- fenetre glissante 1 min / pas 30s
+    # ════════════════════════════════════════════
+    windowed = df_clean.groupBy(
+        window(col("timestamp"), "1 minute", "30 seconds"),
+        col("coin")
+    ).agg(
+        spark_round(avg("price_usd"),  2).alias("avg_price_window"),
+        spark_round(spark_max("price_usd"), 2).alias("max_price_window"),
+        spark_round(spark_min("price_usd"), 2).alias("min_price_window"),
+        count("*").alias("nb_events_window")
+    ).orderBy("window", "coin")
+
+    rows_win = windowed.collect()
+
+    # ════════════════════════════════════════════
+    # 4. ML -- Mise a jour du buffer
+    # ════════════════════════════════════════════
+    pdf = df_clean.select("coin", "price_usd").toPandas()
+
+    for coin, group in pdf.groupby("coin"):
+        # FIX : arrondi a PRICE_DECIMALS pour eviter faux positifs Z-Score
+        rounded_prices = [builtins.round(p, PRICE_DECIMALS) for p in group["price_usd"].tolist()]
+        price_history[coin].extend(rounded_prices)
+        price_history[coin] = price_history[coin][-50:]
+
+    # ── 4a. REGRESSION LINEAIRE ───────────────
+    predictions = {}
+    for coin, prices in price_history.items():
+        predicted, trend = predict_next_price(prices)
+        predictions[coin] = {"predicted": predicted, "trend": trend, "n_points": len(prices)}
+
+    # ── 4b. ANOMALY DETECTION Z-SCORE ─────────
+    anomaly_results = {}
+    for row in rows_agg:
+        coin          = row.coin
+        current_price = builtins.round(float(row.avg_price), PRICE_DECIMALS)
+        prices        = price_history.get(coin, [])
+        status, z     = detect_anomaly_zscore(prices, current_price)
+
+        if status is None:
+            anomaly_results[coin] = {
+                "status"  : "en attente",
+                "z_score" : None,
+                "mean"    : None,
+                "std"     : None,
+                "n_points": len(prices)
+            }
+        else:
+            prices_arr = np.array(prices)
+            anomaly_results[coin] = {
+                "status"  : status,
+                "z_score" : z,
+                "mean"    : builtins.round(float(np.mean(prices_arr)), 4),
+                "std"     : builtins.round(float(np.std(prices_arr)),  4),
+                "n_points": len(prices)
+            }
+
+    # ════════════════════════════════════════════
+    # AFFICHAGE
+    # ════════════════════════════════════════════
+    dropped = total_raw - total_clean
+
+    print(f"\n{'='*75}")
+    print(f"  BATCH {batch_id}  |  {total_raw} evt recus  ->  {total_clean} propres  |  {dropped} filtres")
+    print(f"{'='*75}")
+
+    # -- Cleaning
+    print(f"\n  [CLEANING]")
+    print(f"  Suppression nulls, prix<=0, volume<=0, variation hors [-100,100], doublons")
+    print(f"  {dropped} evenement(s) filtre(s) sur {total_raw}")
+
+    # -- Agregations
+    print(f"\n  [AGREGATIONS] par coin")
+    print(f"  {'COIN':<15} {'AVG $':>12} {'MAX $':>12} {'MIN $':>12} {'RANGE':>10} {'CHG 24h':>9} {'VOLUME':>12}")
+    print(f"  {'-'*85}")
+    most_volatile = builtins.max(rows_agg, key=lambda r: r.price_range)
+    for row in rows_agg:
+        chg  = f"{row.avg_change_24h:+.2f}%"
+        vol  = fmt_volume(row.avg_volume_24h)
+        flag = " *" if row.coin == most_volatile.coin else ""
+        print(f"  {row.coin:<15} {row.avg_price:>12,.2f} {row.max_price:>12,.2f} "
+              f"{row.min_price:>12,.2f} {row.price_range:>10,.2f} {chg:>9} {vol:>12}{flag}")
+    print(f"  (* coin le plus volatil du batch)")
+
+    # -- Windowing
+    print(f"\n  [WINDOWING] fenetre 1 min / pas 30s")
+    print(f"  {'WINDOW':>10} {'COIN':<15} {'AVG $':>12} {'MAX $':>12} {'MIN $':>12} {'N':>5}")
+    print(f"  {'-'*68}")
+    for row in rows_win:
+        wstart = row.window.start.strftime("%H:%M:%S")
+        print(f"  {wstart:>10} {row.coin:<15} {row.avg_price_window:>12,.2f} "
+              f"{row.max_price_window:>12,.2f} {row.min_price_window:>12,.2f} {row.nb_events_window:>5}")
+
+    # -- Regression
+    print(f"\n  [ML - REGRESSION] prediction prochain prix")
+    print(f"  {'COIN':<15} {'PRIX ACTUEL':>14} {'PRIX PREDIT':>14} {'DIFF':>10} {'TENDANCE':>10} {'HIST':>8}")
+    print(f"  {'-'*78}")
+    for row in rows_agg:
+        coin = row.coin
+        pred = predictions.get(coin, {})
+        if pred.get("predicted") is not None:
+            diff     = pred["predicted"] - row.avg_price
+            diff_str = f"{diff:+.4f}"
+            print(f"  {coin:<15} {row.avg_price:>14,.4f} {pred['predicted']:>14,.4f} "
+                  f"{diff_str:>10} {pred['trend']:>10} {pred['n_points']:>6} pts")
+        else:
+            pts = pred.get("n_points", 0)
+            print(f"  {coin:<15} {row.avg_price:>14,.4f} {'...en attente':>14} "
+                  f"{'':>10} {'':>10} {pts:>6} pts  (min {MIN_POINTS})")
+
+    # -- Anomalie Z-Score
+    print(f"\n  [ML - ANOMALIE] Z-Score sur prix (seuil |z| > {ZSCORE_THRESHOLD})")
+    print(f"  {'COIN':<15} {'STATUT':>10} {'Z-SCORE':>10} {'MOYENNE':>12} {'STD':>10} {'HIST':>8}")
+    print(f"  {'-'*70}")
+    for row in rows_agg:
+        coin   = row.coin
+        result = anomaly_results.get(coin, {"status": "en attente", "z_score": None, "mean": None, "std": None, "n_points": 0})
+        if result["z_score"] is not None:
+            z_str    = f"{result['z_score']:+.4f}"
+            mean_str = f"{result['mean']:,.4f}"
+            std_str  = f"{result['std']:.4f}"
+            flag     = "  <--- !!!" if result["status"] == "ANOMALIE" else ""
+            print(f"  {coin:<15} {result['status']:>10} {z_str:>10} {mean_str:>12} {std_str:>10} {result['n_points']:>6} pts{flag}")
+        else:
+            print(f"  {coin:<15} {'en attente':>10} {'N/A':>10} {'N/A':>12} {'N/A':>10} {result['n_points']:>6} pts")
+
+    # ════════════════════════════════════════════
+    # SAUVEGARDE
+    # ════════════════════════════════════════════
+    agg_path     = os.path.join(OUTPUT_DIR, "crypto_agg.csv")
+    pred_path    = os.path.join(OUTPUT_DIR, "crypto_predictions.csv")
+    anomaly_path = os.path.join(OUTPUT_DIR, "crypto_anomalies.csv")
+
+    agg.toPandas().to_csv(agg_path, mode="a", header=not os.path.exists(agg_path), index=False)
+
+    pred_df = pd.DataFrame([
+        {"coin": c, "predicted_price": v["predicted"], "trend": v["trend"], "batch_id": batch_id}
+        for c, v in predictions.items() if v["predicted"] is not None
+    ])
+    if not pred_df.empty:
+        pred_df.to_csv(pred_path, mode="a", header=not os.path.exists(pred_path), index=False)
+
+    anomaly_df = pd.DataFrame([
+        {
+            "coin"      : c,
+            "status"    : v["status"],
+            "z_score"   : v["z_score"],
+            "mean_price": v["mean"],
+            "std_price" : v["std"],
+            "batch_id"  : batch_id
+        }
+        for c, v in anomaly_results.items() if v["status"] != "en attente"
+    ])
+    if not anomaly_df.empty:
+        anomaly_df.to_csv(anomaly_path, mode="a", header=not os.path.exists(anomaly_path), index=False)
+
+# ── Start ─────────────────────────────────────────────────────────────────────
+df.writeStream \
     .foreachBatch(process_batch) \
     .outputMode("append") \
     .option("checkpointLocation", CKPT_DIR) \

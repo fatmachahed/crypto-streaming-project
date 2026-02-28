@@ -1,9 +1,11 @@
-import streamlit as st
+import os, time 
+import time
+import sqlite3
 import pandas as pd
 import plotly.express as px
-import os, time
-import os 
 import plotly.graph_objects as go
+import streamlit as st
+
 st.set_page_config(page_title="📈 Crypto Streaming", layout="wide")
 
 BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
@@ -12,11 +14,6 @@ PRED_PATH    = os.path.join(BASE_DIR, "..", "output", "crypto_predictions.csv")
 ANOMALY_PATH = os.path.join(BASE_DIR, "..", "output", "crypto_anomalies.csv")
 
 # ── connect to SQLITE  ─────────────────────────────
-import sqlite3
-import pandas as pd
-import os
-import streamlit as st
-
 DB_PATH = os.path.join(BASE_DIR, "..", "output", "crypto.db")
 
 # --- Fonction pour vérifier si une table existe ---

@@ -136,58 +136,83 @@ Sauvegarde dans `output/crypto.db` avec 4 tables :
 ## 📊 Dashboard — Description des Visualisations
 
 ### 1. 🏷️ KPIs (Métriques en temps réel)
-
 - **Contenu** : Prix actuel et variation 24h pour chaque coin
 - **Objectif** : Vue d'ensemble instantanée de l'état du marché
 - **Mise à jour** : À chaque refresh (toutes les 10 secondes)
 
-### 2. 🕯️ Candlestick Chart (OHLC 1 minute)
+![KPIs](docs/screenshots/00_kpi.png)
 
+---
+
+### 2. 🕯️ Candlestick Chart (OHLC 1 minute)
 - **Contenu** : Open, High, Low, Close par minute pour le coin sélectionné
 - **Objectif** : Visualisation professionnelle de l'évolution des prix, comme un terminal financier réel
 - **Interaction** : Sélecteur de coin avec boutons radio colorés (🟠 Bitcoin, 🔵 Ethereum, 🟡 BNB, 🟣 Solana, 🔷 Cardano)
 - **Couleurs** : Couleur propre à chaque coin pour la hausse, rouge (#EF5350) pour la baisse
 
-### 3. 💰 Prix en Temps Réel (Facet Line Chart)
+![Candlestick](docs/screenshots/01_candlestick.png)
 
+---
+
+### 3. 💰 Prix en Temps Réel (Facet Line Chart)
 - **Contenu** : Évolution du prix par minute, un sous-graphe par coin
 - **Objectif** : Comparer les tendances de chaque coin avec une échelle Y indépendante par coin (évite l'écrasement visuel dû aux différences d'échelle entre BTC ~65k et ADA ~0.27)
 - **Technique** : `facet_row` Plotly avec `matches=None` pour des axes Y indépendants
 
-### 4. 📊 Variation 24h (Bar Chart)
+![Prix](docs/screenshots/02_prix_realtime.png)
 
+---
+
+### 4. 📊 Variation 24h (Bar Chart)
 - **Contenu** : Pourcentage de variation sur 24h pour chaque coin
 - **Objectif** : Identifier rapidement les coins en hausse (vert) et en baisse (rouge)
 - **Couleurs** : Échelle `RdYlGn` (rouge → jaune → vert)
 
-### 5. 🫧 Volume Relatif (Bubble Chart)
+![Variation](docs/screenshots/03_bar_chart.png)
 
+---
+
+### 5. 🫧 Volume Relatif (Bubble Chart)
 - **Contenu** : Axe X = coin, Axe Y = variation 24h, taille de la bulle = volume 24h
 - **Objectif** : Visualiser simultanément la performance et l'activité de trading de chaque coin
 - **Lecture** : Une grande bulle verte = coin en hausse avec fort volume (signal fort)
 
-### 6. 🔬 Z-Score Anomaly Detection (Scatter Plot)
+![Bubble](docs/screenshots/04_ubble_Chart.png)
 
+---
+
+### 6. 🔬 Z-Score Anomaly Detection (Scatter Plot)
 - **Contenu** : Z-Score de chaque coin dans le temps, avec symbole différent pour les anomalies
 - **Objectif** : Suivre l'évolution du score d'anomalie et identifier les pics statistiquement anormaux
 - **Seuil** : Ligne rouge à |z| = 3.0 (anomalie détectée si dépassé)
 - **Symboles** : Cercle = normal, Croix = anomalie détectée
 
-### 7. 📦 Volume 24h (Bar Chart Log)
+![ZScore](docs/screenshots/05_zscore.png)
 
+---
+
+### 7. 📦 Volume 24h (Bar Chart Log)
 - **Contenu** : Volume de trading sur 24h par coin en échelle logarithmique
 - **Objectif** : Comparer les volumes malgré les différences d'ordre de grandeur (BTC ~40B vs ADA ~600M)
 
-### 8. 🔮 Prédictions ML (Métriques)
+![Volume](docs/screenshots/06_volume_24h.png)
 
+---
+
+### 8. 🔮 Prédictions ML (Métriques)
 - **Contenu** : Prix prédit pour le prochain batch + différence avec le prix actuel
 - **Objectif** : Résultat de la régression linéaire entraînée sur les 50 derniers prix
 - **Icônes** : 📈 HAUSSE / 📉 BAISSE selon la pente du modèle
 
-### 9. 🚨 Alertes Anomalies (Table)
+![Predictions](docs/screenshots/07_prediction_regression.png)
 
+---
+
+### 9. 🚨 Alertes Anomalies (Table)
 - **Contenu** : Historique des anomalies détectées avec coin, z_score, mean_price, std_price
 - **Objectif** : Traçabilité complète des événements anormaux détectés par le Z-Score
+
+![Anomalies](docs/screenshots/08_alertes_anomalies.png)
 
 ---
 
@@ -255,52 +280,22 @@ plotly
 
 ---
 
-## 📸 Screenshots
-
-### 🖥️ Dashboard Complet
+## 🖥️ Dashboard Complet
 
 ![Dashboard 1](docs/screenshots/all_dashboard_1.png)
-![Dashboard 2](docs/screenshots/all_dashboard_2.png)
-![Dashboard 3](docs/screenshots/all_dashboard_3.png)
 
 ---
 
-### 🏷️ KPIs & Vue Générale
+![Dashboard 2](docs/screenshots/all_dashboard_2.png)
 
-![KPIs](docs/screenshots/00_kpi.png)
+---
 
-### 🕯️ Candlestick Chart
-
-![Candlestick](docs/screenshots/01_candlestick.png)
-
-### 💰 Prix en Temps Réel
-
-![Prix](docs/screenshots/02_prix_realtime.png)
-
-### 📊 Variation 24h
-
-![Variation](docs/screenshots/03_bar_chart.png)
-
-### 🫧 Bubble Chart — Volume Relatif
-
-![Bubble](docs/screenshots/04_ubble_Chart.png)
-
-### 🔬 Z-Score Anomaly Detection
-
-![ZScore](docs/screenshots/05_zscore.png)
-
-### 📦 Volume 24h
-
-![Volume](docs/screenshots/06_volume_24h.png)
-
-### 🔮 Prédictions ML (Régression Linéaire)
-
-![Predictions](docs/screenshots/08_prediction_regression.png)
+![Dashboard 3](docs/screenshots/all_dashboard_3.png)
 
 ---
 
 ## 👥 Équipe
 
-**Aziz Dhif**
-**Mohamed Kerim ElKadhi**
-**Fatma Chahed**
+- **Fatma Chahed**
+- **Aziz Dhif**
+- **Mohamed Kerim ElKadhi**

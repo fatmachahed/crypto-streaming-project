@@ -1,3 +1,4 @@
+# streming_app.py
 import sys, os
 sys.stdout.reconfigure(encoding='utf-8')
 from pyspark.sql import SparkSession

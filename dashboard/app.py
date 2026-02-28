@@ -87,7 +87,7 @@ for i, row in latest.iterrows():
     
     
 st.divider()
-st.subheader("Candlestick — Sélectionne un coin")
+st.subheader(" 🕯️Candlestick — Sélectionne un coin")
 
 # Couleurs par coin
 COIN_COLORS = {

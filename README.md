@@ -162,6 +162,7 @@ Sauvegarde dans `output/crypto.db` avec 4 tables :
 - **Contenu** : Évolution du prix par minute, un sous-graphe par coin
 - **Objectif** : Comparer les tendances de chaque coin avec une échelle Y indépendante par coin (évite l'écrasement visuel dû aux différences d'échelle entre BTC ~65k et ADA ~0.27)
 - **Technique** : `facet_row` Plotly avec `matches=None` pour des axes Y indépendants
+- **Valeur ajoutée** : Détecte visuellement les corrélations inter-coins (les mouvements simultanés révèlent une influence du marché global, ex. chute du BTC entraînant la chute de Etheruem)
 
 ![Prix](docs/screenshots/02_prix_realtime.png)
 
@@ -178,7 +179,7 @@ Sauvegarde dans `output/crypto.db` avec 4 tables :
 
 ### 5. 🫧 Volume Relatif (Bubble Chart)
 - **Contenu** : Axe X = coin, Axe Y = variation 24h, taille de la bulle = volume 24h
-- **Objectif** : Visualiser simultanément la performance et l'activité de trading de chaque coin
+- **Objectif** : Une grande bulle verte = hausse confirmée par un fort volume (signal fort et fiable) · Une petite bulle verte = hausse sur faible volume (potentiellement non soutenable) · Grande bulle rouge = forte correction avec forte pression vendeuse .
 - **Lecture** : Une grande bulle verte = coin en hausse avec fort volume (signal fort)
 
 ![Bubble](docs/screenshots/04_ubble_Chart.png)
@@ -203,7 +204,7 @@ Sauvegarde dans `output/crypto.db` avec 4 tables :
 
 ---
 
-### 8. 🔮 Prédictions ML (Métriques)
+### 8. Prédictions ML (Métriques)
 - **Contenu** : Prix prédit pour le prochain batch + différence avec le prix actuel
 - **Objectif** : Résultat de la régression linéaire entraînée sur les 50 derniers prix
 - **Icônes** : 📈 HAUSSE / 📉 BAISSE selon la pente du modèle
@@ -224,7 +225,7 @@ Sauvegarde dans `output/crypto.db` avec 4 tables :
 
 ### Prérequis
 
-- Python 3.10+
+- Python 3.10+ (adapté pour Spark)
 - Docker Desktop
 - Java 11+ (pour Spark)
 - Hadoop (Windows uniquement) : `C:\hadoop`
@@ -274,6 +275,7 @@ ls output/
 ```
 pyspark==3.3.2
 confluent-kafka
+Kafka-python
 requests
 pandas
 numpy

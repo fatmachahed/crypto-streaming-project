@@ -5,7 +5,7 @@
 ## 🌐 Source de Données
 
 Les prix sont récupérés via l'endpoint **CoinGecko `/simple/price`** (gratuit, sans clé API).  
-Chaque appel retourne le prix USD, la variation 24h et le volume 24h pour les 5 coins suivants : `bitcoin`, `ethereum`, `binancecoin`, `solana`, `cardano`.  
+Chaque appel retourne le prix en USD, la variation 24h et le volume 24h pour les 5 coins suivants : `bitcoin`, `ethereum`, `binancecoin`, `solana`, `cardano`.  
 La fréquence de collecte est de **15 secondes** pour respecter le rate limit de l'API gratuite (~30 appels/minute).
 
 ---
@@ -229,7 +229,9 @@ Sauvegarde dans `output/crypto.db` avec 4 tables :
 - Docker Desktop
 - Java 11+ (pour Spark)
 - Hadoop (Windows uniquement) : `C:\hadoop`
-
+  
++ Création des topics specifiques pour chaque tache dans le container Kafka
+  
 ### Installation
 
 ```bash

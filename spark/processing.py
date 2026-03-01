@@ -1,4 +1,3 @@
-#processing.py
 from pyspark.sql.functions import col, window, avg, count
 from pyspark.sql.functions import max as spark_max, min as spark_min
 from pyspark.sql.functions import round as spark_round
@@ -22,14 +21,11 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "..", "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
-# ── foreachBatch ──────────────────────────────────────────────────────────────
 def process_batch(batch_df, batch_id):
     if batch_df.isEmpty():
         return
 
-    # ════════════════════════════════════════════
     # 1. DATA CLEANING
-    # ════════════════════════════════════════════
     df_clean = batch_df \
         .dropna() \
         .filter(col("price_usd") > 0) \
@@ -42,12 +38,10 @@ def process_batch(batch_df, batch_id):
     total_clean = df_clean.count()
 
     if total_clean == 0:
-        print(f"Batch {batch_id} -- vide apres nettoyage")
+        print(f"Batch {batch_id} ")
         return
 
-    # ════════════════════════════════════════════
     # 2. AGREGATIONS PAR COIN
-    # ════════════════════════════════════════════
     agg = df_clean.groupBy("coin").agg(
         spark_round(avg("price_usd"),  2).alias("avg_price"),
         spark_round(spark_max("price_usd"), 2).alias("max_price"),
@@ -64,9 +58,7 @@ def process_batch(batch_df, batch_id):
         print(f"Batch {batch_id} -- aggregation vide, skip")
         return
 
-    # ════════════════════════════════════════════
-    # 3. WINDOWING -- fenetre glissante 1 min / pas 30s
-    # ════════════════════════════════════════════
+    # 3. WINDOWING -- fenetre glissante 1 min 
     windowed = df_clean.groupBy(
         window(col("timestamp"), "1 minute", "30 seconds"),
         col("coin")
@@ -79,9 +71,7 @@ def process_batch(batch_df, batch_id):
 
     rows_win = windowed.collect()
 
-    # ════════════════════════════════════════════
     # 4. ML -- Mise a jour du buffer
-    # ════════════════════════════════════════════
     pdf = df_clean.select("coin", "price_usd").toPandas()
 
     for coin, group in pdf.groupby("coin"):
@@ -90,13 +80,13 @@ def process_batch(batch_df, batch_id):
         price_history[coin].extend(rounded_prices)
         price_history[coin] = price_history[coin][-50:]
 
-    # ── 4a. REGRESSION LINEAIRE ───────────────
+    #  4a. REGRESSION LINEAIRE 
     predictions = {}
     for coin, prices in price_history.items():
         predicted, trend = predict_next_price(prices)
         predictions[coin] = {"predicted": predicted, "trend": trend, "n_points": len(prices)}
 
-    # ── 4b. ANOMALY DETECTION Z-SCORE ─────────
+    # 4b. ANOMALY DETECTION Z-SCORE 
     anomaly_results = {}
     for row in rows_agg:
         coin          = row.coin
@@ -122,14 +112,8 @@ def process_batch(batch_df, batch_id):
                 "n_points": len(prices)
             }
 
-    # ════════════════════════════════════════════
     # AFFICHAGE
-    # ════════════════════════════════════════════
     dropped = total_raw - total_clean
-
-    print(f"\n{'='*75}")
-    print(f"  BATCH {batch_id}  |  {total_raw} evt recus  ->  {total_clean} propres  |  {dropped} filtres")
-    print(f"{'='*75}")
 
     # -- Cleaning
     print(f"\n  [CLEANING]")
@@ -150,7 +134,7 @@ def process_batch(batch_df, batch_id):
     print(f"  (* coin le plus volatil du batch)")
 
     # -- Windowing
-    print(f"\n  [WINDOWING] fenetre 1 min / pas 30s")
+    print(f"\n  [WINDOWING] fenetre 1 min ")
     print(f"  {'WINDOW':>10} {'COIN':<15} {'AVG $':>12} {'MAX $':>12} {'MIN $':>12} {'N':>5}")
     print(f"  {'-'*68}")
     for row in rows_win:
@@ -159,7 +143,7 @@ def process_batch(batch_df, batch_id):
               f"{row.max_price_window:>12,.2f} {row.min_price_window:>12,.2f} {row.nb_events_window:>5}")
 
     # -- Regression
-    print(f"\n  [ML - REGRESSION] prediction prochain prix")
+    print(f"\n  prediction prochain prix")
     print(f"  {'COIN':<15} {'PRIX ACTUEL':>14} {'PRIX PREDIT':>14} {'DIFF':>10} {'TENDANCE':>10} {'HIST':>8}")
     print(f"  {'-'*78}")
     for row in rows_agg:
@@ -176,7 +160,6 @@ def process_batch(batch_df, batch_id):
                   f"{'':>10} {'':>10} {pts:>6} pts  (min {MIN_POINTS})")
 
     # -- Anomalie Z-Score
-    print(f"\n  [ML - ANOMALIE] Z-Score sur prix (seuil |z| > {ZSCORE_THRESHOLD})")
     print(f"  {'COIN':<15} {'STATUT':>10} {'Z-SCORE':>10} {'MOYENNE':>12} {'STD':>10} {'HIST':>8}")
     print(f"  {'-'*70}")
     for row in rows_agg:
@@ -191,9 +174,7 @@ def process_batch(batch_df, batch_id):
         else:
             print(f"  {coin:<15} {'en attente':>10} {'N/A':>10} {'N/A':>12} {'N/A':>10} {result['n_points']:>6} pts")
 
-    # ════════════════════════════════════════════
     # SAUVEGARDE
-    # ════════════════════════════════════════════
     agg_path     = os.path.join(OUTPUT_DIR, "crypto_agg.csv")
     pred_path    = os.path.join(OUTPUT_DIR, "crypto_predictions.csv")
     anomaly_path = os.path.join(OUTPUT_DIR, "crypto_anomalies.csv")

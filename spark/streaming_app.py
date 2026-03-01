@@ -1,4 +1,3 @@
-# streming_app.py
 import sys, os
 sys.stdout.reconfigure(encoding='utf-8')
 from pyspark.sql import SparkSession
@@ -15,7 +14,7 @@ BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 CKPT_DIR   = os.path.join(BASE_DIR, "..", "checkpoints")
 os.makedirs(CKPT_DIR, exist_ok=True)
 
-# ── Schema ────────────────────────────────────────────────────────────────────
+# Schema 
 schema = StructType() \
     .add("coin",       StringType()) \
     .add("timestamp",  StringType()) \
@@ -23,7 +22,7 @@ schema = StructType() \
     .add("change_24h", DoubleType()) \
     .add("volume_24h", DoubleType())
 
-# ── Spark session ─────────────────────────────────────────────────────────────
+# Spark session 
 spark = SparkSession.builder \
     .appName("CryptoStreaming") \
     .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.2") \
@@ -31,7 +30,7 @@ spark = SparkSession.builder \
     .config("spark.driver.host", "localhost") \
     .getOrCreate()
 
-# ── Read from Kafka ───────────────────────────────────────────────────────────
+# Read from Kafka 
 raw = spark.readStream \
     .format("kafka") \
     .option("kafka.bootstrap.servers", "localhost:39092") \
@@ -41,7 +40,7 @@ raw = spark.readStream \
 
 df = raw.select(from_json(col("value").cast("string"), schema).alias("d")).select("d.*")
 
-# ── Start ─────────────────────────────────────────────────────────────────────
+# Start 
 df.writeStream \
     .foreachBatch(process_batch) \
     .outputMode("append") \

@@ -13,10 +13,10 @@ CLEAN_PATH   = os.path.join(BASE_DIR, "..", "output", "crypto_clean.csv")
 PRED_PATH    = os.path.join(BASE_DIR, "..", "output", "crypto_predictions.csv")
 ANOMALY_PATH = os.path.join(BASE_DIR, "..", "output", "crypto_anomalies.csv")
 
-# ── connect to SQLITE  ─────────────────────────────
+# connect to SQLITE  
 DB_PATH = os.path.join(BASE_DIR, "..", "output", "crypto.db")
 
-# --- Fonction pour vérifier si une table existe ---
+# vérifier si la table existe
 def table_exists(conn, table_name):
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
@@ -24,10 +24,9 @@ def table_exists(conn, table_name):
     cursor.close()
     return exists
 
-# --- Lecture des tables avec contrôle ---
+# Lecture des tables 
 conn = sqlite3.connect(DB_PATH)
 
-# crypto_clean
 if table_exists(conn, "crypto_clean"):
     df = pd.read_sql("SELECT * FROM crypto_clean ORDER BY timestamp DESC LIMIT 6000", conn)
 elif os.path.exists(CLEAN_PATH):
@@ -64,7 +63,7 @@ if df.empty:
     time.sleep(3)
     st.experimental_rerun()
 
-# ── Load data ─────────────────────────────
+# Load data 
 df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 if df["timestamp"].dt.tz is None:
     df["timestamp"] = df["timestamp"].dt.tz_localize("UTC")
@@ -72,10 +71,9 @@ df["timestamp"] = df["timestamp"].dt.tz_convert("Africa/Tunis").dt.tz_localize(N
 df = df.dropna(subset=["timestamp"])
 latest = df.sort_values("timestamp").groupby("coin").last().reset_index()
 
-# ── Last update ───────────────────────────
 st.success(f"🔄 {pd.Timestamp.now().strftime('%H:%M:%S')} — {len(df)} events reçus")
 
-# ── KPIs ──────────────────────────────────
+# KPIs 
 cols = st.columns(len(latest))
 for i, row in latest.iterrows():
     delta_color = "normal" if row["change_24h"] >= 0 else "inverse"
@@ -148,7 +146,6 @@ else:
     
 st.divider()
 
-# ── Row 1  ──
 c1, c2 = st.columns([4, 3]) 
 
 with c1:
@@ -214,7 +211,6 @@ with c2:
     fig_bubble.update_layout(height=390, showlegend=False, margin=dict(t=30, b=10))
     st.plotly_chart(fig_bubble, use_container_width=True)
     
-# ── Row 2 ─────────────────────────────────
 c3, c4 = st.columns([4, 3])
 
 with c3:
@@ -246,7 +242,7 @@ with c4:
     st.plotly_chart(fig4, use_container_width=True)
 
 
-# ── Predictions ───────────────────────────
+# ── Predictions 
 st.divider()
 st.subheader("🔮 Prédictions ML (Régression Linéaire)")
 if not df_pred.empty: 
@@ -265,7 +261,7 @@ if not df_pred.empty:
 else:
     st.info("⏳ Prédictions disponibles après 15 batches...")
 
-# ── Anomalies ─────────────────────────────
+# ── Anomalies 
 st.divider()
 st.subheader("🚨 Alertes Anomalies")
 
@@ -279,13 +275,13 @@ if not df_anomaly.empty:
 else:
     st.success("Aucune anomalie détectée pour l'instant")
 
-# ── Raw data ──────────────────────────────
+# ── Raw data 
 with st.expander("Données brutes (50 derniers events)"):
     st.dataframe(
         df.sort_values("timestamp", ascending=False).head(50),
         use_container_width=True
     )
 
-# ── Auto refresh ──────────────────────────
+# refresh 
 time.sleep(10)
 st.experimental_rerun()

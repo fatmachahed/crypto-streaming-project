@@ -110,13 +110,13 @@ Contient la fonction `process_batch(batch_df, batch_id)` qui exécute à chaque 
 
 ### `ml_helpers.py` — Modèles ML
 
-**Régression Linéaire (`predict_next_price`)**
+**Régression Linéaire **
 
 - Entraîne un modèle `LinearRegression` sur les 50 derniers prix de chaque coin
 - Prédit le prochain prix et détermine la tendance (HAUSSE/BAISSE)
 - Nécessite un minimum de **15 points** historiques
 
-**Z-Score (`detect_anomaly_zscore`)**
+**Z-Score **
 
 - Calcule le Z-Score : `z = (prix_actuel - moyenne) / écart_type`
 - Seuil d'anomalie : **|z| > 3.0**
@@ -149,9 +149,10 @@ Sauvegarde dans `output/crypto.db` avec 4 tables :
 
 ### 2. 🕯️ Candlestick Chart (OHLC 1 minute)
 - **Contenu** : Open, High, Low, Close par minute pour le coin sélectionné
-- **Objectif** : Visualisation professionnelle de l'évolution des prix, comme un terminal financier réel
+- **Objectif** : Reproduire l'affichage d'un terminal financier professionnel (Bloomberg, TradingView) pour analyser la microstructure des prix en temps réel
 - **Interaction** : Sélecteur de coin avec boutons radio colorés (🟠 Bitcoin, 🔵 Ethereum, 🟡 BNB, 🟣 Solana, 🔷 Cardano)
 - **Couleurs** : Couleur propre à chaque coin pour la hausse, rouge (#EF5350) pour la baisse
+- **Lecture**: Corps de la bougie = écart Open/Close · Mèche haute = pic atteint · Mèche basse = creux atteint sur la minute
 
 ![Candlestick](docs/screenshots/01_candlestick.png)
 
